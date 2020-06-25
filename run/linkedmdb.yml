@@ -1,0 +1,63 @@
+config:
+    classes:
+      - film_series
+      - film_job
+      - film_film_company_relationship
+      - film_set_designer
+      - film_festival_sponsor
+      - film_collection
+      - film_format
+      - content_rating_system
+      - film_art_director
+      - film_theorist
+      - film_distribution_medium
+      - film_casting_director
+      - film_distributor
+      - music_contributor
+      - country
+      - writer
+      - film_story_contributor
+      - actor
+      - film_cut
+      - content_rating
+      - film_costume_designer
+      - film_featured_song
+      - personal_film_appearance_type
+      - editor
+      - film_company
+      - film_location
+      - film_regional_release_date
+      - film_festival_focus
+      - film_film_distributor_relationship
+      - director
+      - dubbing_performance
+      - producer
+      - special_film_performance_type
+      - personal_film_appearance
+      - film_festival
+      - film
+      - film_subject
+      - film_production_designer
+      - film_character
+      - performance
+      - production_company
+      - film_awards_ceremony
+      - film_screening_venue
+      - film_crew_gig
+      - film_festival_event
+      - film_critic
+      - cinematographer
+      - film_genre
+      - film_crewmember
+    project_method:
+        "hyper"
+    kg_source:
+        "kg/linkedmdb-latest-dump.hdt"
+    subject_limit: 0
+    predicate_limit: 0
+    ontology_prefix: "http://data.linkedmdb.org/resource/movie/"
+    blacklist: "blacklist_dbpedia.txt"
+    direction: in
+    output_dir :
+        "out/linkedmdb"
+

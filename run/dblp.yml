@@ -1,0 +1,24 @@
+config:
+    classes:
+      - PhDThesis
+      - Proceedings
+      - Book
+      - InCollection
+      - Collection
+      - Journal
+      - Conference
+      #- InProceedings
+      #- Article
+      - MasterThesis
+    project_method:
+        "hyper"
+    kg_source:
+      "kg/dblp-2012-11-28.hdt"
+      #"/local/users/lhe/data/hdt/dblp-20170124.hdt"
+    subject_limit: 0
+    predicate_limit: 0
+    ontology_prefix: "http://swrc.ontoware.org/ontology#"
+    blacklist: "blacklist_dbpedia.txt"
+    output_dir :
+        "out/dblp"
+

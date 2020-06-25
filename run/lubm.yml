@@ -1,0 +1,27 @@
+config:
+    classes:
+        - "UndergraduateStudent"
+        #- "TeachingAssistant"
+        #- "Lecturer"
+        #- "Publication"
+        #- "AssistantProfessor"
+        #- "University"
+        #- "ResearchGroup"
+        #- "Course"
+        - "FullProfessor"
+        - "GraduateStudent"
+        #- "ResearchAssistant"
+        #- "GraduateCourse"
+        #- "Department"
+        #- "AssociateProfessor"
+    project_method:
+        "hyper"
+    kg_source:
+        "kg/lubm1.hdt"
+    kg_ontology:
+        "kg/lubm.owl"
+    ontology_prefix: "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"
+    subject_limit: 0
+    predicate_limit: 0
+    output_dir :
+        "out/lubm1/"

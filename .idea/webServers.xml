@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="771cd46c-f25e-45d8-8234-1140f4889ade" name="Merope" url="http://localhost">
+        <fileTransfer host="aifb-ls3-merope.aifb.kit.edu" port="22" rootFolder="/home/lhe" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+      <webServer id="f730f5ea-3054-447c-b653-7b08327cc288" name="remus" url="http://aifb-ls3-remus.aifb.kit.edu">
+        <fileTransfer host="aifb-ls3-remus.aifb.kit.edu" port="22" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

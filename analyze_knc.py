@@ -12,22 +12,23 @@ import pandas as pd
 from tqdm import tqdm
 from logger import get_time
 from importlib import import_module
+from yaml import load, Loader
 
-def get_result(run_name, superclass, result):
+def get_result(run_name, superclass, result, outdir):
         """ Get the result value of a superclass """
-        df = pd.read_csv(f"out/_results_{run_name}.csv", index_col=0)
+        df = pd.read_csv(f"{outdir}/_results_{run_name}.csv", index_col=0)
         return df.loc[superclass, result]
 
-def add_results(run_name, superclass, **results):
+def add_results(run_name, superclass, outdir ,**results):
     """ Append result columns in a superclass row """
-    df = pd.read_csv(f"out/_results_{run_name}.csv", index_col=0)
+    df = pd.read_csv(f"{outdir}/_results_{run_name}.csv", index_col=0)
     for resultname, result in results.items():
         df.loc[superclass, resultname] = result
-    df.to_csv(f"out/_results_{run_name}.csv")
+    df.to_csv(f"{outdir}/_results_{run_name}.csv")
 
-def read_knc_list(superclass, onemode):
+def read_knc_list(superclass, onemode, outdir):
     """ Read KNC plot values from csv file """
-    df = pd.read_csv(f"out/{superclass}/{superclass}.{onemode}.knc.csv")
+    df = pd.read_csv(f"{outdir}/{superclass}/{superclass}.{onemode}.knc.csv")
     return list(df.itertuples(index=False, name=None))
 
 def compute_rc(knc_list, n_max, k_max):
@@ -38,8 +39,12 @@ def compute_rc(knc_list, n_max, k_max):
         slcc_sum = 0
         for k in tqdm(range(0, k_max)):
             density_sum += knc_list[k][1]
-            ncomponents_sum += (n_max - knc_list[k][2]) / (n_max - 1)
-            slcc_sum += (knc_list[k][3] - 1) / (n_max - 1)
+            try:
+                ncomponents_sum += (n_max - knc_list[k][2]) / (n_max - 1)
+                slcc_sum += (knc_list[k][3] - 1) / (n_max - 1)
+            except ZeroDivisionError:
+                ncomponents_sum = 0
+                slcc_sum = 0
         rc_density = (1 / k_max) * density_sum
         rc_ncomponents = (1 / k_max) * ncomponents_sum
         rc_slcc = (1 / k_max) * slcc_sum
@@ -47,6 +52,7 @@ def compute_rc(knc_list, n_max, k_max):
         print(f"[Info] rc_ncomponents {rc_ncomponents:.8f}")
         print(f"[Info] rc_slcc {rc_slcc:.8f}")
         return rc_density, rc_ncomponents, rc_slcc
+
     elif len(knc_list[0]) == 2: # Weight distribution was used to compute density
         for k in tqdm(range(0, k_max)):
             density_sum += knc_list[k][1]
@@ -68,9 +74,9 @@ def get_k_0(knc_list):
             return knc_step[0]
     return math.inf
 
-def get_rel_rc(run_name, superclass, rc_dens, onemode):
+def get_rel_rc(run_name, superclass, rc_dens, onemode, outdir):
     """ Compute the representational consistency relative to its run superclass """
-    df = pd.read_csv(f"out/_results_{run_name}.csv", index_col=0)
+    df = pd.read_csv(f"{outdir}/_results_{run_name}.csv", index_col=0)
     if superclass == df.index[0]:
         return None
     else:
@@ -81,30 +87,30 @@ def get_rel_rc(run_name, superclass, rc_dens, onemode):
             rc_dens_super = df.iloc[0].rc_dens_b
         return rc_dens / rc_dens_super
 
-def get_disc_nodes(run_name, classname, onemode):
+def get_disc_nodes(run_name, classname, onemode, outdir):
     """ Get number of disconnected nodes in the onemode projection based on degree dist """
     nnodes = 0
-    n_om = get_result(run_name, classname, f"n_{onemode}")
-    with open(f"out/{classname}/{classname}.{onemode}.k.json", "r") as in_file:
+    n_om = get_result(run_name, classname, f"n_{onemode}", outdir)
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.k.json", "r") as in_file:
         k_dist = json.load(in_file)
     for degree, count in k_dist.items():
         if int(degree) > 0:
             nnodes += count
     return n_om - nnodes
 
-def get_median(run_name, classname, disttype, onemode):
+def get_median(run_name, classname, disttype, onemode, outdir):
     """ Get median of k (degree) or c (connectivity) distribution """
     labels = []
-    with open(f"out/{classname}/{classname}.{onemode}.{disttype}.json", "r") as input_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.{disttype}.json", "r") as input_file:
         dist = json.load(input_file)
     for label, count in dist.items():
         labels.extend([int(label)] * count)
     return np.median(labels)
 
-def get_weight_median(run_name, classname, onemode):
+def get_weight_median(run_name, classname, onemode, outdir):
     """ Get median of w (edgeweight) distribution based on frequency table """
-    m_om = get_result(run_name, classname, f"m_{onemode}")
-    with open(f"out/{classname}/{classname}.{onemode}.w.json", "r") as input_file:
+    m_om = get_result(run_name, classname, f"m_{onemode}", outdir)
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.w.json", "r") as input_file:
         w_dist = json.load(input_file)
     # Compute the 0.5 quantile
     quantile = 0.5
@@ -117,49 +123,49 @@ def get_weight_median(run_name, classname, onemode):
                 return int(weight)
     return None
 
-def get_stdev(run_name, classname, disttype, onemode):
+def get_stdev(run_name, classname, disttype, onemode, outdir):
     """ Get standard deviation of k (degree) or c (connectivity) distribution """
     labels = []
-    with open(f"out/{classname}/{classname}.{onemode}.{disttype}.json", "r") as input_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.{disttype}.json", "r") as input_file:
         dist = json.load(input_file)
     for label, count in dist.items():
         labels.extend([int(label)] * count)
     return np.std(labels)
 
-def analyze_knc(run_name, superclass):
+def analyze_knc(run_name, superclass, outdir):
     """ Get metrics of knc curve for both onemodes and save them in results file """
-    n_t = int(get_result(run_name, superclass, "n_t"))
-    n_b = int(get_result(run_name, superclass, "n_b"))
-
-    knc_t = read_knc_list(superclass, "t")
+    n_t = int(get_result(run_name, superclass, "n_t", outdir))
+    n_b = int(get_result(run_name, superclass, "n_b", outdir))
+    print("here")
+    knc_t = read_knc_list(superclass, "t", outdir)
     rc_t_dens, rc_t_ncomp, rc_t_slcc = compute_rc(knc_t, n_t, n_b)
     avg_dens_t = compute_avg_dens(knc_t, n_b)
     max_dens_t = knc_t[0][1]
     k_0_t = get_k_0(knc_t)
-    rel_rc_t = get_rel_rc(run_name, superclass, rc_t_dens, "t")
-    n_disc_t = get_disc_nodes(run_name, superclass, "t")
-    k_med_t = get_median(run_name, superclass, "k", "t")
-    c_med_t = get_median(run_name, superclass, "c", "t")
-    w_med_t = get_weight_median(run_name, superclass, "t")
-    k_sd_t = get_stdev(run_name, superclass, "k", "t")
-    c_sd_t = get_stdev(run_name, superclass, "c", "t")
+    rel_rc_t = get_rel_rc(run_name, superclass, rc_t_dens, "t", outdir)
+    n_disc_t = get_disc_nodes(run_name, superclass, "t", outdir)
+    k_med_t = get_median(run_name, superclass, "k", "t", outdir)
+    c_med_t = get_median(run_name, superclass, "c", "t", outdir)
+    w_med_t = get_weight_median(run_name, superclass, "t", outdir)
+    k_sd_t = get_stdev(run_name, superclass, "k", "t", outdir)
+    c_sd_t = get_stdev(run_name, superclass, "c", "t", outdir)
     # w_sd_t = ... # TODO: Compute mean/median/stdev based on frequency table
 
-    knc_b = read_knc_list(superclass, "b")
+    knc_b = read_knc_list(superclass, "b", outdir)
     rc_b_dens, rc_b_ncomp, rc_b_slcc = compute_rc(knc_b, n_b, n_t)
     avg_dens_b = compute_avg_dens(knc_b, n_t)
     max_dens_b = knc_b[0][1]
     k_0_b = get_k_0(knc_b)
-    rel_rc_b = get_rel_rc(run_name, superclass, rc_b_dens, "b")
-    n_disc_b = get_disc_nodes(run_name, superclass, "b")
-    k_med_b = get_median(run_name, superclass, "k", "b")
-    c_med_b = get_median(run_name, superclass, "c", "b")
-    w_med_b = get_weight_median(run_name, superclass, "b")
-    k_sd_b = get_stdev(run_name, superclass, "k", "b")
-    c_sd_b = get_stdev(run_name, superclass, "c", "b")
+    rel_rc_b = get_rel_rc(run_name, superclass, rc_b_dens, "b", outdir)
+    n_disc_b = get_disc_nodes(run_name, superclass, "b", outdir)
+    k_med_b = get_median(run_name, superclass, "k", "b", outdir)
+    c_med_b = get_median(run_name, superclass, "c", "b", outdir)
+    w_med_b = get_weight_median(run_name, superclass, "b", outdir)
+    k_sd_b = get_stdev(run_name, superclass, "k", "b", outdir)
+    c_sd_b = get_stdev(run_name, superclass, "c", "b", outdir)
     # w_sd_b = ... # TODO: Compute mean/median/stdev based on frequency table
 
-    add_results(run_name, superclass,
+    add_results(run_name, superclass, outdir,
                 rc_t_dens=rc_t_dens, rc_t_ncomp=rc_t_ncomp, rc_t_slcc=rc_t_slcc,
                 avg_dens_t=avg_dens_t, max_dens_t=max_dens_t, k_0_t=k_0_t, rel_rc_t=rel_rc_t,
                 n_disc_t=n_disc_t, k_med_t=k_med_t, c_med_t=c_med_t, w_med_t=w_med_t, k_sd_t=k_sd_t, c_sd_t=c_sd_t,
@@ -170,19 +176,21 @@ def analyze_knc(run_name, superclass):
 
 @get_time
 def main():
-    run_name = sys.argv[1][:-3]
-    run = import_module(run_name)
-
-    for superclass in run.config["classes"]:
+    run_fn = sys.argv[1]
+    run_name = run_fn.split("/")[-1].split(".")[0]
+    run = load(open(run_fn).read(), Loader=Loader)
+    outdir = run['config'].get('output_dir', 'out')
+    
+    for superclass in run['config']["classes"]:
         print("\n[Analyze knc]", superclass)
         try:
-            analyze_knc(run_name, superclass)
+            analyze_knc(run_name, superclass, outdir)
         except FileNotFoundError as e:
             print(f"[Info] file not found {superclass} graph is the null graph\n{e}")
         except KeyError as e:
             print(f"[Info] key not found {superclass} graph is the null graph\n{e}")
 
-    res = pd.read_csv(f"out/_results_{run_name}.csv", index_col=0)
+    res = pd.read_csv(f"{outdir}/_results_{run_name}.csv", index_col=0)
     res = res.rename(columns={
         "k_t": "k_t_g", "k_b": "k_b_g",
         "k_t_om": "k_mean_t", "k_b_om": "k_mean_b",
@@ -203,6 +211,8 @@ def main():
         # 'superclass',
         ]
     res = res[cols]
-    res.to_csv(f"out/_results_{run_name}.csv")
+    res.to_csv(f"{outdir}/_results_{run_name}.csv")
 
-main()
+
+if __name__ == '__main__':
+    main()

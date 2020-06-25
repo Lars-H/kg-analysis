@@ -1,0 +1,16 @@
+config:
+    classes:
+        - "Boxer"
+    project_method:
+        "hyper"
+    kg_source:
+        "kg/dbpedia2016-04en.hdt"
+    kg_ontology:
+        "kg/dbpedia_2016-04.owl"
+    subject_limit: 0
+    predicate_limit: 0
+    blacklist: "blacklist_dbpedia.txt"
+    direction: in
+    output_dir :
+        "out/testout_in"
+

@@ -20,37 +20,40 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import multiprocessing as mp
+from yaml import load, Loader
 
-def read_edgelist(superclass, label):
+def read_edgelist(superclass, label, outdir="out"):
     """ Read edgelist from csv file """
-    df = pd.read_csv(f"out/{superclass}/{superclass}.{label}.csv")
+    df = pd.read_csv(f"{outdir}/{superclass}/{superclass}.{label}.csv")
     return list(df.itertuples(index=False, name=None))
 
-def get_result(run_name, superclass, result):
+def get_result(run_name, superclass, result,outdir="out"):
     """ Get the result value of a superclass """
-    df = pd.read_csv(f"out/_results_{run_name}.csv", index_col=0)
+    df = pd.read_csv(f"{outdir}/_results_{run_name}.csv", index_col=0)
     return df.loc[superclass, result]
 
-def add_results(run_name, superclass, **results):
+def add_results(run_name, superclass, outdir="out" ,**results):
     """ Append result columns in a superclass row """
-    df = pd.read_csv(f"out/_results_{run_name}.csv", index_col=0)
+    df = pd.read_csv(f"{outdir}/_results_{run_name}.csv", index_col=0)
     for resultname, result in results.items():
         df.loc[superclass, resultname] = result
-    df.to_csv(f"out/_results_{run_name}.csv")
+    df.to_csv(f"{outdir}/_results_{run_name}.csv")
 
 @get_time
-def write_edgelist(classname, onemode, edgelist):
+def write_edgelist(classname, onemode, edgelist,outdir="out"):
     """ Write edge list to csv file """
     df = pd.DataFrame(edgelist, columns=["node_a", "node_b", "w"])
-    df.to_csv(f"out/{classname}/{classname}.{onemode}.csv", index=False)
+    df.to_csv(f"{outdir}/{classname}/{classname}.{onemode}.csv", index=False)
 
-def project_graph(run_name, superclass, project_method):
+def project_graph(run_name, superclass, project_method, outdir):
     """ Get the onemode representations of the bipartite subject-predicate graph of a superclass """
-    edgelist = read_edgelist(superclass, "g")
+
     if project_method == "hyper": # Benchmark: @get_ram * ncores == htop ram ?
-        project_hyper(run_name, superclass, edgelist)
+        edgelist = read_edgelist(superclass, "g", outdir=outdir)
+        project_hyper(run_name, superclass, edgelist, outdir=outdir)
     elif project_method == "intersect_al":
-        project_intersect_al(superclass, edgelist)
+        edgelist = read_edgelist(superclass, "i", outdir=outdir)
+        project_intersect_al(superclass, edgelist, outdir=outdir)
     # elif project_method == "intersect": # Compare and benchmark approaches
     #     project_intersect(superclass, bigraph, nodes_top, nodes_bot)
     # elif project_method == "dot":
@@ -61,18 +64,18 @@ def project_graph(run_name, superclass, project_method):
     #     project_nx(superclass, bigraph, nodes_top, nodes_bot)
 
 @get_ram
-def project_hyper(run_name, superclass, edgelist):
+def project_hyper(run_name, superclass, edgelist, outdir):
     """ Get both top and bot onemode graph of superclass using multiprocessing """
     al_top = get_adjacencylist(edgelist, "t")
-    project_hyper_onemode(run_name, superclass, "t", al_top)
+    project_hyper_onemode(run_name, superclass, "t", al_top, outdir=outdir)
     al_bot = get_adjacencylist(edgelist, "b")
-    project_hyper_onemode(run_name, superclass, "b", al_bot)
+    project_hyper_onemode(run_name, superclass, "b", al_bot, outdir=outdir)
 
 @get_ram
-def project_hyper_onemode(run_name, superclass, onemode, adj_list):
+def project_hyper_onemode(run_name, superclass, onemode, adj_list, outdir):
     """ Start multiple processes with split up adjacency list """
     gen_pairs = combinations(adj_list, 2)
-    n = int(get_result(run_name, superclass, f"n_{onemode}"))
+    n = int(get_result(run_name, superclass, f"n_{onemode}", outdir=outdir))
     pairs_len = n * (n - 1) * 0.5
     ncores = os.cpu_count()
     size = ceil(pairs_len / ncores)
@@ -84,28 +87,28 @@ def project_hyper_onemode(run_name, superclass, onemode, adj_list):
         print(f"[Info] Discard om edgelists {superclass} {onemode}")
     with mp.Pool() as pool:
         gen_slices = [islice(gen_pairs, size * i, size * (i + 1)) for i in range(0, ncores)]
-        gen_slices = [(superclass, onemode, size, ncores, save_el, gen_slice) for gen_slice in gen_slices]
+        gen_slices = [(superclass, onemode, size, ncores, save_el, gen_slice, outdir) for gen_slice in gen_slices]
         pool.starmap(project_gen, gen_slices)
-    m = combine_weights(run_name, superclass, onemode)
-    k = combine_degrees(superclass, onemode, ncores)
-    c = combine_connectivities(superclass, onemode, ncores)
+    m = combine_weights(run_name, superclass, onemode, outdir)
+    k = combine_degrees(superclass, onemode, ncores, outdir)
+    c = combine_connectivities(superclass, onemode, ncores, outdir)
 
     if onemode == "t":
-        add_results(run_name, superclass, m_t=m, k_mean_t=k, c_mean_t=c)
+        add_results(run_name, superclass,outdir, m_t=m, k_mean_t=k, c_mean_t=c)
     elif onemode == "b":
-        add_results(run_name, superclass, m_b=m, k_mean_b=k, c_mean_b=c)
+        add_results(run_name, superclass,outdir, m_b=m, k_mean_b=k, c_mean_b=c)
     if save_el:
-        concatenate_el(superclass, onemode)
-    clean_out(superclass, onemode)
+        concatenate_el(superclass, onemode, outdir)
+    clean_out(superclass, onemode, outdir)
 
-def project_gen(classname, onemode, size, ncores, save_el, al_gen):
+def project_gen(classname, onemode, size, ncores, save_el, al_gen, outdir):
     """ Get a weigthed edgelist by intersecting pairs from adjacency list generator slices """
     pid = mp.current_process()._identity[0]
     print(f"[Info] PID {pid:04}")
     om_weights = {}
     om_degrees = {}
     om_connectivity = {}
-    with open(f"./out/{classname}/{classname}.{onemode}.{pid:04}.csv", "a") as output_file:
+    with open(f"./{outdir}/{classname}/{classname}.{onemode}.{pid:04}.csv", "a") as output_file:
         if pid % (2 * ncores) == ncores:
             for node_a, node_b in tqdm(al_gen, total=size):
                 neighbors_a = node_a[1]
@@ -133,24 +136,24 @@ def project_gen(classname, onemode, size, ncores, save_el, al_gen):
                     om_connectivity[node_b[0]] = om_connectivity.get(node_b[0], 0) + weight
                     if save_el:
                         output_file.write(f"{node_a[0]} {node_b[0]} {weight}\n")
-    with open(f"out/{classname}/{classname}.{onemode}.w.{pid:04}.json", "w") as output_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.w.{pid:04}.json", "w") as output_file:
         json.dump(om_weights, output_file)
-    with open(f"out/{classname}/{classname}.{onemode}.k.{pid:04}.json", "w") as output_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.k.{pid:04}.json", "w") as output_file:
         json.dump(om_degrees, output_file)
-    with open(f"out/{classname}/{classname}.{onemode}.nc.{pid:04}.json", "w") as output_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.nc.{pid:04}.json", "w") as output_file:
         json.dump(om_connectivity, output_file)
 
-def combine_weights(run_name, classname, onemode):
+def combine_weights(run_name, classname, onemode, outdir):
     """ Combine all multiprocessing weight dict files to single file, Count total edges """
     om_weights = {}
     regex = f"{classname}.{onemode}.w.[0-9][0-9][0-9][0-9].json"
-    mp_files = [mp_file for mp_file in os.listdir(f'out/{classname}') if re.match(regex, mp_file)]
+    mp_files = [mp_file for mp_file in os.listdir(f'{outdir}/{classname}') if re.match(regex, mp_file)]
     for mp_file in mp_files:
-        with open(f"out/{classname}/" + mp_file, "r") as input_file:
+        with open(f"{outdir}/{classname}/" + mp_file, "r") as input_file:
             mp_om_weights = json.load(input_file)
             for key, value in mp_om_weights.items():
                 om_weights[key] = om_weights.get(key, 0) + value
-    with open(f"out/{classname}/{classname}.{onemode}.w.json", "w") as output_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.w.json", "w") as output_file:
         json.dump(om_weights, output_file, indent=4, sort_keys=True)
     m = 0
     for key, value in om_weights.items():
@@ -158,24 +161,24 @@ def combine_weights(run_name, classname, onemode):
             m += value
     return m
 
-def combine_degrees(classname, onemode, ncores):
+def combine_degrees(classname, onemode, ncores, outdir):
     """ Combine all multiprocessing degree dict files to single file, Count occurences of degrees, Compute avg degree """
     om_degrees = {}
     regex = f"{classname}.{onemode}.k.[0-9][0-9][0-9][0-9].json"
-    mp_files = [mp_file for mp_file in os.listdir(f'out/{classname}') if re.match(regex, mp_file)]
+    mp_files = [mp_file for mp_file in os.listdir(f'{outdir}/{classname}') if re.match(regex, mp_file)]
     for mp_file in mp_files:
-        with open(f"out/{classname}/" + mp_file, "r") as input_file:
+        with open(f"{outdir}/{classname}/" + mp_file, "r") as input_file:
             mp_om_degrees = json.load(input_file)
             for key, value in mp_om_degrees.items():
                 om_degrees[key] = om_degrees.get(key, 0) + value
-    with open(f"out/{classname}/{classname}.{onemode}.nk.json", "w") as output_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.nk.json", "w") as output_file:
         json.dump(om_degrees, output_file, indent=4)
 
     om_degrees_count = {}
     for key, value in om_degrees.items():
         om_degrees_count[value] = om_degrees_count.get(value, 0) + 1
     om_degrees_count = {int(key):om_degrees_count[key] for key in om_degrees_count.keys()}
-    with open(f"out/{classname}/{classname}.{onemode}.k.json", "w") as output_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.k.json", "w") as output_file:
         json.dump(om_degrees_count, output_file, indent=4, sort_keys=True)
     n = 0
     for key, value in om_degrees_count.items():
@@ -185,24 +188,24 @@ def combine_degrees(classname, onemode, ncores):
         k += key * (value / n)
     return k
 
-def combine_connectivities(classname, onemode, ncores):
+def combine_connectivities(classname, onemode, ncores, outdir):
     """ Combine all multiprocessing connectivity dict files to single file, Count occurences of connectivity, Compute avg connectivity """
     om_connectivity = {}
     regex = f"{classname}.{onemode}.nc.[0-9][0-9][0-9][0-9].json"
-    mp_files = [mp_file for mp_file in os.listdir(f'out/{classname}') if re.match(regex, mp_file)]
+    mp_files = [mp_file for mp_file in os.listdir(f'{outdir}/{classname}') if re.match(regex, mp_file)]
     for mp_file in mp_files:
-        with open(f"out/{classname}/" + mp_file, "r") as input_file:
+        with open(f"{outdir}/{classname}/" + mp_file, "r") as input_file:
             mp_om_connectivity = json.load(input_file)
             for key, value in mp_om_connectivity.items():
                 om_connectivity[key] = om_connectivity.get(key, 0) + value
-    with open(f"out/{classname}/{classname}.{onemode}.nc.json", "w") as output_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.nc.json", "w") as output_file:
         json.dump(om_connectivity, output_file, indent=4)
 
     om_connectivity_count = {}
     for key, value in om_connectivity.items():
         om_connectivity_count[value] = om_connectivity_count.get(value, 0) + 1
     om_connectivity_count = {int(key):om_connectivity_count[key] for key in om_connectivity_count.keys()}
-    with open(f"out/{classname}/{classname}.{onemode}.c.json", "w") as output_file:
+    with open(f"{outdir}/{classname}/{classname}.{onemode}.c.json", "w") as output_file:
         json.dump(om_connectivity_count, output_file, indent=4, sort_keys=True)
     n = 0
     for key, value in om_connectivity_count.items():
@@ -212,27 +215,27 @@ def combine_connectivities(classname, onemode, ncores):
         c += key * (value / n)
     return c
 
-def concatenate_el(classname, onemode):
+def concatenate_el(classname, onemode, outdir):
     """ Combine all multiprocessing edgelist files to single onemode edgelist file in shell """
-    os.system(f"cd out/{classname}; echo {onemode}1 {onemode}2 w > {classname}.{onemode}.csv")
-    os.system(f"cd out/{classname}; ls | grep {classname}\.[{onemode}]\.....\.'csv' | xargs cat >> {classname}.{onemode}.csv")
+    os.system(f"cd {outdir}/{classname}; echo {onemode}1 {onemode}2 w > {classname}.{onemode}.csv")
+    os.system(f"cd {outdir}/{classname}; ls | grep {classname}\.[{onemode}]\.....\.'csv' | xargs cat >> {classname}.{onemode}.csv")
 
-def clean_out(classname, onemode):
+def clean_out(classname, onemode, outdir):
     """ Remove multiprocessing files """
-    os.system(f"cd out/{classname}; ls | grep {classname}\.[{onemode}]\.[w]\.....\.'json' | xargs rm")
-    os.system(f"cd out/{classname}; ls | grep {classname}\.[{onemode}]\.[k]\.....\.'json' | xargs rm")
-    os.system(f"cd out/{classname}; ls | grep {classname}\.[{onemode}]\.[n][c]\.....\.'json' | xargs rm")
-    os.system(f"cd out/{classname}; ls | grep {classname}\.[{onemode}]\.....\.'csv' | xargs rm")
+    os.system(f"cd {outdir}/{classname}; ls | grep {classname}\.[{onemode}]\.[w]\.....\.'json' | xargs rm")
+    os.system(f"cd {outdir}/{classname}; ls | grep {classname}\.[{onemode}]\.[k]\.....\.'json' | xargs rm")
+    os.system(f"cd {outdir}/{classname}; ls | grep {classname}\.[{onemode}]\.[n][c]\.....\.'json' | xargs rm")
+    os.system(f"cd {outdir}/{classname}; ls | grep {classname}\.[{onemode}]\.....\.'csv' | xargs rm")
 
 @get_ram
-def project_intersect_al(superclass, edgelist):
+def project_intersect_al(superclass, edgelist, outdir):
     """ Project a bipartite graph to its onemode representations in edgelist format """
     al_top = get_adjacencylist(edgelist, "t")
     om_edges_top = project_intersect_al_onemode(al_top)
-    write_edgelist(superclass, "t", om_edges_top)
+    write_edgelist(superclass, "t", om_edges_top, outdir)
     al_bot = get_adjacencylist(edgelist, "b")
     om_edges_bot = project_intersect_al_onemode(al_bot)
-    write_edgelist(superclass, "b", om_edges_bot)
+    write_edgelist(superclass, "b", om_edges_bot, outdir)
 
 @get_time
 def project_intersect_al_onemode(onemode_al):
@@ -270,12 +273,12 @@ def get_adjacencylist(edgelist, onemode):
     return al
 
 @get_ram
-def project_intersect(superclass, bigraph, nodes_top, nodes_bot):
+def project_intersect(superclass, bigraph, nodes_top, nodes_bot, outdir):
     """ Project a bipartite graph to its onemode representations in edgelist format """
     om_edges_top = project_intersect_onemode(superclass, bigraph, "t", nodes_top)
-    write_edgelist(superclass, "t", om_edges_top)
+    write_edgelist(superclass, "t", om_edges_top, outdir)
     om_edges_bot = project_intersect_onemode(superclass, bigraph, "b", nodes_bot)
-    write_edgelist(superclass, "b", om_edges_bot)
+    write_edgelist(superclass, "b", om_edges_bot, outdir)
 
 @get_time
 def project_intersect_onemode(superclass, bigraph, onemode, onemode_nodes):
@@ -292,17 +295,17 @@ def project_intersect_onemode(superclass, bigraph, onemode, onemode_nodes):
             om_edges.append((node_a, node_b, weight))
     return om_edges
 
-def project_dot(superclass, bigraph, nodes_top, nodes_bot):
+def project_dot(superclass, bigraph, nodes_top, nodes_bot, outdir):
     """ project a bipartite graph to its onemode representations in sparse matrix format """
     t_start = time.time()
     A = nx.bipartite.biadjacency_matrix(bigraph, row_order=nodes_top, column_order=nodes_bot, dtype="uint16")
     print(f"[Time] comp-biadj-matrix {time.time() - t_start:.3f} sec")
     print("[Info] A shape", A.shape)
     print("[Info] A dtype", A.dtype)
-    project_dot_onemode(superclass, A, "t")
-    project_dot_onemode(superclass, A, "b")
+    project_dot_onemode(superclass, A, "t", outdir)
+    project_dot_onemode(superclass, A, "b", outdir)
 
-def project_dot_onemode(superclass, biadjmatrix, onemode):
+def project_dot_onemode(superclass, biadjmatrix, onemode, outdir):
     """ Get the weigthed adjacency matrix of the onemode graph by matrix multiplication """
     t_start = time.time()
     if onemode == "t":
@@ -326,7 +329,7 @@ def project_dot_onemode(superclass, biadjmatrix, onemode):
     print(f"[Info] wmatrix {onemode} tril type {type(wmatrix)}")
     print(f"[Info] wmatrix {onemode} tril nbytes data in GB {(wmatrix.data.nbytes) / (1000 ** 3):.6f}")
     t_start = time.time()
-    sparse.save_npz(f"out/{superclass}.{onemode}.npz", wmatrix)
+    sparse.save_npz(f"{outdir}/{superclass}.{onemode}.npz", wmatrix)
     print(f"[Time] save-npz {onemode} {time.time() - t_start:.3f} sec")
 
 def project_hop(superclass, bigraph, nodes_top, nodes_bot):
@@ -364,20 +367,26 @@ def project_nx_onemode(superclass, bigraph, onemode, onemode_nodes):
     write_edgelist(superclass, onemode, om_edges)
     print(f"[Time] convert-write-edgelist {onemode} {time.time() - t_start:.3f} sec")
 
+
+
 @get_time
 @get_ram
 def main():
-    if __name__ == "__main__":
-        run_name = sys.argv[1][:-3]
-        run = import_module(run_name)
-        
-        for superclass in run.config["classes"]:
-            print("\n[Project]", superclass)
-            try:
-                project_graph(run_name, superclass, run.config["project_method"])
-            except FileNotFoundError as e:
-                print(f"[Info] file not found {superclass} graph is the null graph\n{e}")
-            except KeyError as e:
-                sys.exit("[Error] Please specify project_method as <hyper;intersect_al;intersect;hop;dot;nx> in run config\n", e)
+    run_fn = sys.argv[1]
+    run_name = run_fn.split("/")[-1].split(".")[0]
+    run = load(open(run_fn).read(), Loader=Loader)
+    outdir = run['config'].get('output_dir', 'out')
 
-main()
+
+    for superclass in run['config']["classes"]:
+        print("\n[Project]", superclass)
+        try:
+            project_graph(run_name, superclass, run['config']["project_method"], outdir)
+        except FileNotFoundError as e:
+            print(f"[Info] file not found {superclass} graph is the null graph\n{e}")
+        except KeyError as e:
+            sys.exit("[Error] Please specify project_method as <hyper;intersect_al;intersect;hop;dot;nx> in run config\n", e)
+
+
+if __name__ == '__main__':
+    main()

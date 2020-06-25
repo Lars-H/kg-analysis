@@ -1,0 +1,11 @@
+config:
+    classes:
+        - "Q11338576" # Boxer
+        #- Q220505 # Film Festival
+    project_method:
+        "hyper"
+    subject_limit: 0
+    predicate_limit: 0
+    blacklist: "blacklist_wikidata.txt"
+    output_dir :
+        "out/testout_in"

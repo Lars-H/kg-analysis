@@ -1,0 +1,13 @@
+config:
+    classes:
+        - "Component"
+        - "Form"
+        - "LexicalSense"
+        - "LexicalEntry"
+    project_method: "hyper" #"intersect_al"#"hyper"
+    kg_source: "kg/wordnet31.hdt"
+    ontology_prefix: "http://lemon-model.net/lemon#"
+    subject_limit: 0
+    predicate_limit: 0
+    output_dir :
+        "out/wordnet/"
